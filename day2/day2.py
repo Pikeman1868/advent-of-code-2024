@@ -12,13 +12,16 @@ class NotIncreasingException(UnSafeReactorException):
 class NotDecreasingException(UnSafeReactorException):
     pass
 
+class MagnitudeException(UnSafeReactorException):
+    pass
+
 class Validator:
     def verify_direction(self, previous:int, current:List[int]):
         pass
 
     def verify_magnitude(self, previous:int, current:List[int]):
-        if abs(previous - current[0]) > 3:
-            raise NotDecreasingException(f"{abs(previous - current[0])} > 3")
+        if len(current) > 0 and abs(previous - current[0]) > 3:
+            raise MagnitudeException(f"{abs(previous - current[0])} > 3")
 
 class ProxyValidator(Validator):
     def __init__(self, validator:Validator) -> None:
@@ -30,20 +33,26 @@ class Dampener(ProxyValidator):
         super().__init__(validator)
 
     def verify_magnitude(self, previous: int, current: List[int]): 
-        return self._validator.verify_magnitude(previous, current)
+        try:
+            self._validator.verify_magnitude(previous, current)
+        except UnSafeReactorException:
+            self._validator.verify_magnitude(previous, current[1:])
     
     def verify_direction(self, previous: int, current: List[int]):
-        return self._validator.verify_direction(previous, current)
+        try:
+            self._validator.verify_direction(previous, current)
+        except UnSafeReactorException:
+            self._validator.verify_direction(previous, current[1:])
 
 class IncreasingValidator(Validator):
     def verify_direction(self, previous:int, current:List[int]):
-        if not previous < current[0]:
-            raise NotIncreasingException(f"{previous} > {current}")  
+        if len(current) > 0 and previous >= current[0]:
+            raise NotIncreasingException(f"{previous} > {current[0]}")  
         
 class DecreasingValidator(Validator):
     def verify_direction(self, previous:int, current:List[int]):
-        if not previous > current[0]:
-            raise NotDecreasingException(f"{previous} < {current}") 
+        if len(current) > 0 and previous <= current[0]:
+            raise NotDecreasingException(f"{previous} < {current[0]}") 
     
 class ValidatorFactory():
     def make(self, data:List[int]) -> Validator:
@@ -82,11 +91,15 @@ def verify_safe(previous:int, remaining:List[int], validation:Validator):
     if len(remaining) > 1:
         verify_safe(remaining[0], remaining[1:], validation)
         
-def count_safe_reactor_days(data:str) -> int:
+def count_safe_reactor_days(data:str, dampener:bool=False) -> int:
     safe_days = 0
     data_by_day = parse_reactor_data(data)
+    if dampener:
+        factory = DampenerValidatorFactory()
+    else :
+        factory = DirectionValidatorFactory()
     for day in data_by_day:
-        if is_day_safe(day):
+        if is_day_safe(day, factory):
             safe_days += 1
     return safe_days
 
