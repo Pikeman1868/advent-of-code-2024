@@ -59,4 +59,10 @@ def test_read_day(input, expected):
 
 @pytest.mark.parametrize("input, expected", [([7, 6, 4, 2, 1], DecreasingValidator), ([1, 2, 7, 8, 9], IncreasingValidator ), ([9, 7, 6, 2, 1], DecreasingValidator), ([1, 3, 2, 4, 5], IncreasingValidator), ([8, 6, 4, 4, 1], DecreasingValidator), ([1, 3, 6, 7, 9], IncreasingValidator)])
 def test_determine_direction(input, expected):
-    isinstance(determine_direction(input), expected)
+    assert isinstance(DirectionValidatorFactory().make(input), expected)
+
+
+@pytest.mark.parametrize("input, expected", [([7, 6, 4, 2, 1], True), ([1, 2, 7, 8, 9], False ),
+    ([1, 2, 7, 8, 9], False), ([9, 7, 6, 2, 1], True), ([1, 3, 2, 4, 5], True), ([8, 6, 4, 4, 1], True), ([1, 3, 6, 7, 9], True)])
+def test_problem_dampener(input, expected):
+    assert is_day_safe(input, DampenerValidatorFactory()) == expected
