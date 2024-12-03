@@ -176,20 +176,24 @@ class ValidatorFactory():
 
 class DirectionValidatorFactory(ValidatorFactory):
     def make(self, data: List[int]) -> AbstractValidator:
-        if data[0] < data[1]:
+        trend = 0
+        for element in range(1, len(data)):
+            result = data[element-1] - data[element]
+            if result < 0:
+                trend += 1
+            elif result > 0:
+                trend -=1
+    
+        if trend > 0:
             return IncreasingValidator(data)
-        elif data[0] > data[1]:
+        elif trend < 0:
             return DecreasingValidator(data)
         else:
             raise NoChangeException(f"{data[0]} == {data[1]}")
         
 class DampenerValidatorFactory(DirectionValidatorFactory):
     def make(self, data: List[int]) -> AbstractValidator:
-        try:
-            factory = Dampener(super().make(data))
-        except NoChangeException:
-            factory = Dampener(super().make(data[1:])) # remove first
-        return factory
+        return Dampener(super().make(data))
 
 def is_day_safe(list:List[int], factory=DirectionValidatorFactory()) -> bool:
         try:
