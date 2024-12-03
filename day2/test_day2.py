@@ -63,6 +63,7 @@ def test_determine_direction(input, expected):
 
 
 @pytest.mark.parametrize("input, expected", [([7, 6, 4, 2, 1], True), ([1, 2, 7, 8, 9], False ),
- ([9, 7, 6, 2, 1], False), ([1, 3, 2, 4, 5], True), ([8, 6, 4, 4, 1], True), ([1, 3, 6, 7, 9], True)])
+ ([9, 7, 6, 2, 1], False), ([1, 3, 2, 4, 5], True), ([8, 6, 4, 4, 1], True), ([1, 3, 6, 7, 9], True),([1,2,3,4,4], True)])
 def test_problem_dampener(input, expected):
+    
     assert is_day_safe(input, DampenerValidatorFactory()) == expected

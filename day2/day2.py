@@ -1,4 +1,5 @@
-from typing import List
+from typing import List, Protocol
+import logging
 
 class UnSafeReactorException(Exception):
     pass
@@ -15,81 +16,190 @@ class NotDecreasingException(UnSafeReactorException):
 class MagnitudeException(UnSafeReactorException):
     pass
 
-class Validator:
-    def verify_direction(self, previous:int, current:List[int]):
+class Validator(Protocol):
+    def verify_safe(self) -> bool:
         pass
 
-    def verify_magnitude(self, previous:int, current:List[int]):
-        if len(current) > 0 and abs(previous - current[0]) > 3:
-            raise MagnitudeException(f"{abs(previous - current[0])} > 3")
+class AbstractValidator(Validator):
+    def __init__(self, data:List[int]):
+        self._data:List[int] = data
+        self._previous:int = 0
+        self._current:int = 0
+
+    @property
+    def previous(self) -> int:
+        return self._previous
+    
+    @previous.setter
+    def previous(self, index:int) :
+        self._previous = index
+
+    @property
+    def current(self) -> int:
+        return self._current
+    
+    @current.setter
+    def current(self, index:int) :
+        self._current = index
+
+    @property
+    def data(self) -> List[int]:
+        return self._data
+
+    def verify_safe(self) -> bool:
+        self.previous = 0
+        self.current = 1
+        is_safe = True
+        try:
+            while self.current < len(self.data):
+                self.verify_direction()
+                self.verify_magnitude()
+                self.previous = self.current
+                self.current += 1
+                
+        except UnSafeReactorException as e:
+            logging.info(msg="Reading unsafe", exc_info=e)
+            is_safe = False
+
+        return is_safe
+   
+    def verify_direction(self):
+        pass
+
+    def verify_magnitude(self):
+        previous_reading = self.data[self.previous]
+        current_reading = self.data[self.current]
+        result = abs(previous_reading - current_reading)
+        if result > 3:
+            raise MagnitudeException(f"{result} > 3")
+
 
 class ProxyValidator(Validator):
-    def __init__(self, validator:Validator) -> None:
+    def __init__(self, validator:AbstractValidator) -> None:
         super().__init__()
-        self._validator: Validator = validator
+        self._validator: AbstractValidator = validator
+
+    @property
+    def previous(self) -> int:
+        return self._validator.previous
+    
+    @previous.setter
+    def previous(self, index:int) :
+        self._validator.previous = index
+
+    @property
+    def current(self) -> int:
+        return self._validator._current
+    
+    @current.setter
+    def current(self, index:int) :
+        self._validator._current = index
+
+    @property
+    def data(self) -> List[int]:
+        return self._validator._data
+
+    def verify_safe(self) -> bool:
+        self.previous = 0
+        self.current = 1
+        is_safe = True
+        try:
+            while self.current < len(self.data):
+                self.verify_direction()
+                self.verify_magnitude()
+                self.previous = self.current
+                self.current += 1
+                
+        except UnSafeReactorException as e:
+            logging.info(msg="Reading unsafe", exc_info=e)
+            is_safe = False
+
+        return is_safe
+   
+    def verify_direction(self):
+        self._validator.verify_direction()
+
+    def verify_magnitude(self):
+        self._validator.verify_magnitude()
+    
 
 class Dampener(ProxyValidator):
-    def __init__(self, validator: Validator) -> None:
+    def __init__(self, validator: AbstractValidator) -> None:
         super().__init__(validator)
+        self._dampened:bool = False
 
-    def verify_magnitude(self, previous: int, current: List[int]): 
+    def verify_safe(self) -> bool:
+        self._dampened = False
+        return super().verify_safe()
+
+    def verify_magnitude(self): 
         try:
-            self._validator.verify_magnitude(previous, current)
-        except UnSafeReactorException:
-            self._validator.verify_magnitude(previous, current[1:])
+            self._validator.verify_magnitude()
+        except UnSafeReactorException as e:
+            logging.info(msg="Value unsafe... applying dampenin", exc_info=e)
+            self._dampen(self._validator.verify_magnitude, e)
     
-    def verify_direction(self, previous: int, current: List[int]):
+    def verify_direction(self):
         try:
-            self._validator.verify_direction(previous, current)
-        except UnSafeReactorException:
-            self._validator.verify_direction(previous, current[1:])
+            self._validator.verify_direction()
+        except UnSafeReactorException as e: 
+            logging.info(msg="Value unsafe... applying dampenin", exc_info=e)  
+            self._dampen(self._validator.verify_direction, e)
 
-class IncreasingValidator(Validator):
-    def verify_direction(self, previous:int, current:List[int]):
-        if len(current) > 0 and previous >= current[0]:
-            raise NotIncreasingException(f"{previous} > {current[0]}")  
+    def _dampen(self, func, e:UnSafeReactorException):
+        if not self._dampened:
+            self._dampened = True
+            
+            if self.current < len(self.data)-1:
+                self.current += 1 #skip element
+                func()
+        else:
+            raise e # Rethrow
+
+class IncreasingValidator(AbstractValidator):
+    def verify_direction(self):
+        previous_reading = self.data[self.previous]
+        current_reading = self.data[self.current]
+        if previous_reading >= current_reading:
+            raise NotDecreasingException(f"{previous_reading} >= {current_reading}")  
         
-class DecreasingValidator(Validator):
-    def verify_direction(self, previous:int, current:List[int]):
-        if len(current) > 0 and previous <= current[0]:
-            raise NotDecreasingException(f"{previous} < {current[0]}") 
+class DecreasingValidator(AbstractValidator):
+    def verify_direction(self):
+        previous_reading = self.data[self.previous]
+        current_reading = self.data[self.current]
+        if previous_reading <= current_reading:
+            raise NotDecreasingException(f"{previous_reading} <= {current_reading}") 
     
 class ValidatorFactory():
-    def make(self, data:List[int]) -> Validator:
+    def make(self, data:List[int]) -> AbstractValidator:
         pass
 
 class DirectionValidatorFactory(ValidatorFactory):
-    def make(self, data: List[int]) -> Validator:
+    def make(self, data: List[int]) -> AbstractValidator:
         if data[0] < data[1]:
-            return IncreasingValidator()
+            return IncreasingValidator(data)
         elif data[0] > data[1]:
-            return DecreasingValidator()
+            return DecreasingValidator(data)
         else:
             raise NoChangeException(f"{data[0]} == {data[1]}")
         
 class DampenerValidatorFactory(DirectionValidatorFactory):
-    def make(self, data: List[int]) -> Validator:
-        return Dampener(super().make(data))
+    def make(self, data: List[int]) -> AbstractValidator:
+        try:
+            factory = Dampener(super().make(data))
+        except NoChangeException:
+            factory = Dampener(super().make(data[1:])) # remove first
+        return factory
 
 def is_day_safe(list:List[int], factory=DirectionValidatorFactory()) -> bool:
-    try:
-        # Deterimer direction
-        direction_validator = factory.make(list)
-        verify_safe(list[0], list[1:], direction_validator)
-
-        return True
-    except UnSafeReactorException:
-        return False
+        try:
+            direction_validator = factory.make(list)
+            return direction_validator.verify_safe()
+        except UnSafeReactorException:
+            return False
 
 def difference_elements(previous:int, current:int) -> int:
     return previous - current
-
-
-def verify_safe(previous:int, remaining:List[int], validation:Validator):
-    validation.verify_direction(previous, remaining)
-    validation.verify_magnitude(previous, remaining)
-    if len(remaining) > 1:
-        verify_safe(remaining[0], remaining[1:], validation)
         
 def count_safe_reactor_days(data:str, dampener:bool=False) -> int:
     safe_days = 0
@@ -114,6 +224,7 @@ def parse_reactor_data(data:str) -> List[List[int]]:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     with open("input.txt", "r") as f:
         data = f.read()
         print(count_safe_reactor_days(data))
